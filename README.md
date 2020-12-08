@@ -11,7 +11,7 @@ pip3 install -r requirements.txt
 ## Train
 
 ```shell script
-python3 train.py -b 16 --epoch 51 -lr 0.001 -b1 0. -b2 0.9
+python3 train.py -b 32 --epoch 101 -lr 0.001 -b1 0.2 -b2 0.95
 ```
 
 ## Results

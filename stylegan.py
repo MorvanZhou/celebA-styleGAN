@@ -52,7 +52,7 @@ class StyleGAN(keras.Model):
         self._b_scale_count = 0
         self.lambda_ = lambda_
 
-        self.const = tf.random.normal([4, 4, 128], 0, 0.05)
+        self.const = tf.random.normal([4, 4, 256], 0, 0.05)
         self.f = self._get_f()
         self.g = self._get_generator()
         self.d = self._get_discriminator()
@@ -76,7 +76,7 @@ class StyleGAN(keras.Model):
             LeakyReLU(0.2),
             Dense(128),
             LeakyReLU(0.2),
-            Dense(128),
+            Dense(256),
             LeakyReLU(0.2),
         ], name="f")
         return f
@@ -92,11 +92,11 @@ class StyleGAN(keras.Model):
 
         x = self.add_noise(self.const, noise)
         x = AdaNorm(exclude_mean=self.exclude_mean)(x)
-        x = self.style_block(128, x, w1, noise, upsampling=False)  # 4^2
+        x = self.style_block(256, x, w1, noise, upsampling=False)  # 4^2
         x = self.style_block(128, x, w1, noise)  # 8^2
         x = self.style_block(128, x, w1, noise)  # 16^2
         x = self.style_block(128, x, w1, noise)  # 32^2
-        x = self.style_block(128, x, w2, noise)  # 64^2
+        x = self.style_block(256, x, w2, noise)  # 64^2
         x = self.style_block(128, x, w2, noise)  # 128^2
         o = Conv2D(3, 7, 1, "same", activation="tanh")(x)
         g = keras.Model([z1, z2, noise_], o, name="generator")
@@ -135,11 +135,13 @@ class StyleGAN(keras.Model):
         add_block(64, do_norm=False)   # -> 64^2
         add_block(128)                   # -> 32^2
         add_block(256)                  # -> 16^2
-        add_block(256)                  # -> 8^2
+        add_block(512)                  # -> 8^2
         # add_block(512)                # -> 4^2
 
         model.add(Conv2D(128, 3, 2, "valid"))
+        model.add(InstanceNormalization(exclude_mean=exclude_mean))
         model.add(Flatten())
+        model.add(keras.layers.Dense(128))
         model.add(keras.layers.Dense(1))
 
         model.summary()
