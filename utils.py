@@ -21,15 +21,20 @@ def set_soft_gpu(soft_gpu):
 def save_gan(model, path):
     global z1, z2
     if "z1" not in globals():
-        z1 = np.random.normal(0, 1, size=(9, model.latent_dim))
+        z1 = np.random.normal(0, 1, size=(9, 1, model.latent_dim))
     if "z2" not in globals():
-        z2 = np.random.normal(0, 1, size=(9, model.latent_dim))
-    imgs = model.predict([z1.repeat(9, axis=0), np.concatenate([z2 for _ in range(9)], axis=0),
-                          np.zeros([len(z1) * 9, model.img_shape[0], model.img_shape[1]], dtype=np.float32)])
-    z1_imgs = model.predict(
-        [z1, z1, np.zeros([len(z1), model.img_shape[0], model.img_shape[1]], dtype=np.float32)])
-    z2_imgs = model.predict(
-        [z2, z2, np.zeros([len(z2), model.img_shape[0], model.img_shape[1]], dtype=np.float32)])
+        z2 = np.random.normal(0, 1, size=(9, 1, model.latent_dim))
+    inputs = [np.ones((len(z1)*9, 1)), np.concatenate(
+        (z1.repeat(9, axis=0).repeat(2, axis=1),
+         np.repeat(np.concatenate([z2 for _ in range(9)], axis=0), model.n_style_block - 2, axis=1)),
+        axis=1),
+              np.zeros([len(z1) * 9, model.img_shape[0], model.img_shape[1]], dtype=np.float32)]
+    z1_inputs = [np.ones((len(z1), 1)), z1.repeat(model.n_style_block, axis=1), np.zeros([len(z1), model.img_shape[0], model.img_shape[1]], dtype=np.float32)]
+    z2_inputs = [np.ones((len(z2), 1)), z2.repeat(model.n_style_block, axis=1), np.zeros([len(z2), model.img_shape[0], model.img_shape[1]], dtype=np.float32)]
+
+    imgs = model.predict(inputs)
+    z1_imgs = model.predict(z1_inputs)
+    z2_imgs = model.predict(z2_inputs)
     imgs = np.concatenate([z2_imgs, imgs], axis=0)
     rest_imgs = np.concatenate([np.ones([1, 128, 128, 3], dtype=np.float32), z1_imgs], axis=0)
     for i in range(len(rest_imgs)):

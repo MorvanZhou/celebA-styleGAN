@@ -1,1 +1,0 @@
-python3 train.py -b 16 --epoch 101 --latent 128 --soft_gpu -lr 0.001 -b1 0. -b2 0.9

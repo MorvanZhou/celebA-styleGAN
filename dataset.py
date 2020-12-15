@@ -30,7 +30,7 @@ def _bytes_img_process(img_str):
 
 class CelebA:
     def __init__(self, batch_size, data_dir="data"):
-        self.img_dir = os.path.join(data_dir, "list_attr_celeba.txt")
+        self.img_dir = os.path.join(data_dir, "img_align_celeba")
         self.tfrecord_dir = os.path.join(data_dir, "tfrecord-celebA-stylegan")
         self.batch_size = batch_size
         self.ds = None
@@ -66,6 +66,7 @@ class CelebA:
         for i, chunk in enumerate(chunks):
             path = os.path.join(self.tfrecord_dir, "{}.tfrecord".format(i))
             os.makedirs(os.path.dirname(path), exist_ok=True)
+            print("parsing " + path)
             with tf.io.TFRecordWriter(path) as writer:
                 for img_name in chunk:
                     try:

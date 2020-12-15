@@ -5,13 +5,13 @@ An implementation of StyleGAN on CelebA dataset.
 ```shell script
 git clone https://github.com/MorvanZhou/celebA-styleGAN
 cd celebA-styleGAN
-pip3 install -r requirements.txt
+pip install -r requirements.txt
 ```
 
 ## Train
 
 ```shell script
-python3 train.py -b 32 --epoch 101 -lr 0.001 -b1 0.2 -b2 0.95
+python train.py --data_dir D:\data\celebA_img_align -b 12 --latent 128 --epoch 101 -lr 0.001 -b1 0.2 -b2 0.95
 ```
 
 ## Results

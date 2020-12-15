@@ -20,10 +20,11 @@ parser.add_argument("--soft_gpu", dest="soft_gpu", action="store_true", default=
 parser.add_argument("-lr", "--learning_rate", dest="lr", default=0.0002, type=float)
 parser.add_argument("-b1", "--beta1", dest="beta1", default=0.5, type=float)
 parser.add_argument("-b2", "--beta2", dest="beta2", default=0.999, type=float)
-parser.add_argument("--lsgan", dest="lsgan", action="store_true", default=False)
 parser.add_argument("--data_dir", dest="data_dir", default="./data")
 
-args = parser.parse_args()
+args = parser.parse_args(
+    """--data_dir D:\data\celebA_img_align -b 12 --latent 128 --epoch 101 -lr 0.0001 -b1 0.2 -b2 0.95""".split(" ")
+)
 
 date_str = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
@@ -49,12 +50,10 @@ def train(gan, d):
 def init_logger(date_str, m):
     logger = utils.get_logger(date_str)
     logger.info(str(args))
-    logger.info("model parameters: f={}, g={}, d={}".format(
-        m.f.count_params(), m.g.count_params(), m.d.count_params()))
+    logger.info("model parameters: g={}, d={}".format(
+        m.g.count_params(), m.d.count_params()))
 
     try:
-        tf.keras.utils.plot_model(m.f, show_shapes=True, expand_nested=True, dpi=150,
-                                  to_file="visual/{}/net_f.png".format(date_str))
         tf.keras.utils.plot_model(m.g, show_shapes=True, expand_nested=True, dpi=150,
                                   to_file="visual/{}/net_g.png".format(date_str))
         tf.keras.utils.plot_model(m.d, show_shapes=True, expand_nested=True, dpi=150,
@@ -71,7 +70,7 @@ if __name__ == "__main__":
     d = load_celebA_tfrecord(args.batch_size//2, args.data_dir)
     m = StyleGAN(
         img_shape=(128, 128, 3), latent_dim=args.latent, exclude_mean=args.exclude_mean, summary_writer=summary_writer,
-        lr=args.lr, beta1=args.beta1, beta2=args.beta2, ls_loss=args.lsgan)
+        lr=args.lr, beta1=args.beta1, beta2=args.beta2)
     logger = init_logger(date_str, m)
     train(m, d)
 
