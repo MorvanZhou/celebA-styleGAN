@@ -20,17 +20,25 @@ def set_soft_gpu(soft_gpu):
 
 def save_gan(model, path):
     global z1, z2
+    n = 7
     if "z1" not in globals():
-        z1 = np.random.normal(0, 1, size=(9, 1, model.latent_dim))
+        z1 = np.random.normal(0, 1, size=(n, 1, model.latent_dim))
     if "z2" not in globals():
-        z2 = np.random.normal(0, 1, size=(9, 1, model.latent_dim))
-    inputs = [np.ones((len(z1)*9, 1)), np.concatenate(
-        (z1.repeat(9, axis=0).repeat(2, axis=1),
-         np.repeat(np.concatenate([z2 for _ in range(9)], axis=0), model.n_style_block - 2, axis=1)),
-        axis=1),
-              np.zeros([len(z1) * 9, model.img_shape[0], model.img_shape[1]], dtype=np.float32)]
-    z1_inputs = [np.ones((len(z1), 1)), z1.repeat(model.n_style_block, axis=1), np.zeros([len(z1), model.img_shape[0], model.img_shape[1]], dtype=np.float32)]
-    z2_inputs = [np.ones((len(z2), 1)), z2.repeat(model.n_style_block, axis=1), np.zeros([len(z2), model.img_shape[0], model.img_shape[1]], dtype=np.float32)]
+        z2 = np.random.normal(0, 1, size=(n, 1, model.latent_dim))
+    n_z1 = 3
+    assert n_z1 < model.n_style_block - 1
+    noise = np.random.normal(0, 1, [len(z1), model.img_shape[0], model.img_shape[1]])
+    inputs = [
+        np.ones((len(z1)*n, 1)),
+        np.concatenate(
+            (z1.repeat(n, axis=0).repeat(n_z1, axis=1),
+             np.repeat(np.concatenate([z2 for _ in range(n)], axis=0), model.n_style_block - n_z1, axis=1)),
+            axis=1
+        ),
+        noise.repeat(n, axis=0),
+    ]
+    z1_inputs = [np.ones((len(z1), 1)), z1.repeat(model.n_style_block, axis=1), noise]
+    z2_inputs = [np.ones((len(z2), 1)), z2.repeat(model.n_style_block, axis=1), noise]
 
     imgs = model.predict(inputs)
     z1_imgs = model.predict(z1_inputs)
@@ -38,11 +46,11 @@ def save_gan(model, path):
     imgs = np.concatenate([z2_imgs, imgs], axis=0)
     rest_imgs = np.concatenate([np.ones([1, 128, 128, 3], dtype=np.float32), z1_imgs], axis=0)
     for i in range(len(rest_imgs)):
-        imgs = np.concatenate([imgs[:i * 10], rest_imgs[i:i + 1], imgs[i * 10:]], axis=0)
+        imgs = np.concatenate([imgs[:i * (n+1)], rest_imgs[i:i + 1], imgs[i * (n+1):]], axis=0)
     imgs = (imgs + 1) / 2
 
     plt.clf()
-    nc, nr = 10, 10
+    nc, nr = n+1, n+1
     plt.figure(0, (nc*2, nr*2))
     for c in range(nc):
         for r in range(nr):
@@ -75,29 +83,27 @@ def get_logger(date_str):
 
 
 class InstanceNormalization(keras.layers.Layer):
-    def __init__(self, exclude_mean=True, trainable=None, epsilon=1e-5):
+    def __init__(self, axis=(1, 2), epsilon=1e-6):
         super().__init__()
         self.epsilon = epsilon
-        self.trainable = trainable
-        self.exclude_mean = exclude_mean
+        self.axis = axis
         self.beta, self.gamma = None, None
 
     def build(self, input_shape):
+        shape = [1, 1, 1, input_shape[-1]]
         self.gamma = self.add_weight(
             name='gamma',
-            shape=[1, 1, input_shape[-1]],
-            initializer='ones',
-            trainable=self.trainable)
+            shape=shape,
+            initializer='ones')
 
         self.beta = self.add_weight(
             name='beta',
-            shape=[1, 1, input_shape[-1]],
-            initializer='zeros',
-            trainable=self.trainable)
+            shape=shape,
+            initializer='zeros')
 
-    def call(self, x, trainable=None):
-        ins_mean, ins_sigma = tf.nn.moments(x, axes=[1, 2], keepdims=True)
-        top = x if self.exclude_mean else (x - ins_mean)
-        x_ins = top * (tf.math.rsqrt(ins_sigma + self.epsilon))
-        out = x_ins * self.gamma + self.beta
-        return out
+    def call(self, x, *args, **kwargs):
+        mean = tf.math.reduce_mean(x, axis=self.axis, keepdims=True)
+        x -= mean
+        variance = tf.reduce_mean(tf.math.square(x), axis=self.axis, keepdims=True)
+        x *= tf.math.rsqrt(variance + self.epsilon)
+        return x * self.gamma + self.beta

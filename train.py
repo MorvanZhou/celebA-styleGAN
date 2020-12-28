@@ -14,16 +14,15 @@ np.random.seed(1)
 parser = argparse.ArgumentParser()
 parser.add_argument("-b", "--batch_size", dest="batch_size", default=64, type=int)
 parser.add_argument("-e", "--epoch", dest="epoch", default=101, type=int)
-parser.add_argument("--latent", dest="latent", default=256, type=int)
-parser.add_argument("--exclude_mean", dest="exclude_mean", action="store_true", default=False)
+parser.add_argument("--latent", dest="latent", default=128, type=int)
 parser.add_argument("--soft_gpu", dest="soft_gpu", action="store_true", default=False)
 parser.add_argument("-lr", "--learning_rate", dest="lr", default=0.0002, type=float)
-parser.add_argument("-b1", "--beta1", dest="beta1", default=0.5, type=float)
-parser.add_argument("-b2", "--beta2", dest="beta2", default=0.999, type=float)
+parser.add_argument("-b1", "--beta1", dest="beta1", default=0., type=float)
+parser.add_argument("-b2", "--beta2", dest="beta2", default=0.99, type=float)
 parser.add_argument("--data_dir", dest="data_dir", default="./data")
 
 args = parser.parse_args(
-    """--data_dir D:\data\celebA_img_align -b 12 --latent 128 --epoch 101 -lr 0.0001 -b1 0.2 -b2 0.95""".split(" ")
+    # """--data_dir data\celebA_img_align -b 12 --latent 128 --epoch 101 -lr 0.0001 -b1 0.2 -b2 0.95""".split(" ")
 )
 
 date_str = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
@@ -69,7 +68,7 @@ if __name__ == "__main__":
     summary_writer = tf.summary.create_file_writer('visual/{}'.format(date_str))
     d = load_celebA_tfrecord(args.batch_size//2, args.data_dir)
     m = StyleGAN(
-        img_shape=(128, 128, 3), latent_dim=args.latent, exclude_mean=args.exclude_mean, summary_writer=summary_writer,
+        img_shape=(128, 128, 3), latent_dim=args.latent, summary_writer=summary_writer,
         lr=args.lr, beta1=args.beta1, beta2=args.beta2)
     logger = init_logger(date_str, m)
     train(m, d)
