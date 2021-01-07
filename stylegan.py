@@ -6,7 +6,7 @@ from utils import InstanceNormalization
 import tensorflow.keras.initializers as initer
 
 
-class AdaNorm(keras.layers.Layer):
+class AdaNorm(Layer):
     def __init__(self, axis=(1, 2), epsilon=1e-6):
         super().__init__()
         # NHWC
@@ -21,29 +21,26 @@ class AdaNorm(keras.layers.Layer):
         return x
 
 
-class AdaMod(keras.layers.Layer):
+class AdaMod(Layer):
     def __init__(self):
         super().__init__()
-        self.y, self.s = None, None
+        self.y = None
 
     def call(self, inputs, **kwargs):
         x, w = inputs
-        y = self.s * self.y(w)  # scaling may help reduce model collapse
+        y = self.y(w)
         o = (y[:, 0] + 1) * x + y[:, 1]
         return o
 
     def build(self, input_shape):
         x_shape, w_shape = input_shape
         self.y = keras.Sequential([
-            keras.layers.Dense(x_shape[-1]*2, input_shape=w_shape[1:],
-                               kernel_initializer=initer.HeNormal(),
-                               ),   # this kernel and bias is important
-            keras.layers.Reshape([2, 1, 1, -1])
+            Dense(x_shape[-1]*2, input_shape=w_shape[1:], kernel_initializer=initer.HeNormal()),
+            Reshape([2, 1, 1, -1]),
         ])  # [2, h, w, c] per feature map
-        self.s = self.add_weight(name="mod_scale", shape=[2, 1, 1, x_shape[-1]], initializer=initer.RandomNormal(0, 1))
 
 
-class AddNoise(keras.layers.Layer):
+class AddNoise(Layer):
     def __init__(self):
         super().__init__()
         self.s = None
@@ -60,7 +57,7 @@ class AddNoise(keras.layers.Layer):
                                  initializer=initer.RandomNormal(0, 0.05))
 
 
-class Map(keras.layers.Layer):
+class Map(Layer):
     def __init__(self, size, num_layers):
         super().__init__()
         self.size = size
@@ -76,24 +73,26 @@ class Map(keras.layers.Layer):
         for i in range(self.num_layers):
             if i == 0:
                 self.f.add(Dense(self.size, input_shape=input_shape[1:], kernel_initializer=initer.HeNormal()))
-            self.f.add(keras.layers.LeakyReLU(0.2))
+                continue
+            self.f.add(LeakyReLU(0.2))      #TODO: may hurt generator? increase model collapse? why?
             self.f.add(Dense(self.size, kernel_initializer=initer.HeNormal()))
 
 
-class Style(keras.layers.Layer):
+class Style(Layer):
     def __init__(self, filters, upsampling=True):
         super().__init__()
         self.filters = filters
         self.upsampling = upsampling
-        self.ada_mod, self.ada_norm, self.add_noise, self.up, self.conv = None, None, None, None, None
+        self.ada_mod, self.ada_norm, self.add_noise, self.up, self.conv, self.conv_expend = None, None, None, None, None, None
 
     def call(self, inputs, **kwargs):
         x, w, noise = inputs
+        x = self.conv_expend(x)     #TODO: may help for styling
         x = self.ada_mod((x, w))
         if self.up is not None:
             x = self.up(x)
         x = self.conv(x)
-        x = keras.layers.LeakyReLU(0.2)(x)
+        x = LeakyReLU(0.2)(x)
         x = self.add_noise((x, noise))
         x = self.ada_norm(x)
         return x
@@ -102,9 +101,10 @@ class Style(keras.layers.Layer):
         self.ada_mod = AdaMod()
         self.ada_norm = AdaNorm()
         if self.upsampling:
-            self.up = keras.layers.UpSampling2D((2, 2), interpolation="bilinear")
+            self.up = UpSampling2D((2, 2), interpolation="bilinear")
         self.add_noise = AddNoise()
-        self.conv = keras.layers.Conv2D(self.filters, 3, 1, "same", kernel_initializer=initer.HeNormal())
+        self.conv_expend = Conv2D(self.filters*2, 1, 1, kernel_initializer=initer.HeNormal())
+        self.conv = Conv2D(self.filters, 3, 1, "same", kernel_initializer=initer.HeNormal())
 
 
 def get_generator(latent_dim, img_shape):
@@ -121,16 +121,15 @@ def get_generator(latent_dim, img_shape):
     w = Map(size=128, num_layers=3)(z)
     noise = tf.expand_dims(noise_, axis=-1)
     const = keras.Sequential([
-        keras.layers.Dense(const_size * const_size * 128, use_bias=False, name="const",
-                           kernel_initializer=initer.HeNormal()),
-        keras.layers.Reshape((const_size, const_size, -1)),
+        Dense(const_size * const_size * 128, use_bias=False, name="const", kernel_initializer=initer.HeNormal()),
+        Reshape((const_size, const_size, -1)),
     ], name="const")(ones)
 
     x = AddNoise()((const, noise))
     x = AdaNorm()(x)
     for i in range(n_style_block):
         x = Style(128, upsampling=False if i == 0 else True)((x, w[:, i], noise))
-    o = keras.layers.Conv2D(img_shape[-1], 7, 1, "same", activation=keras.activations.tanh)(x)
+    o = Conv2D(img_shape[-1], 7, 1, "same", activation=keras.activations.tanh)(x)
 
     g = keras.Model([ones, z, noise_], o, name="generator")
     g.summary()
@@ -176,8 +175,8 @@ class StyleGAN(keras.Model):
         # model.add(Conv2D(256, 3, 2, "valid"))
         # model.add(InstanceNormalization())
         # model.add(LeakyReLU(alpha=0.2))
-        model.add(keras.layers.GlobalAveragePooling2D())
-        model.add(keras.layers.Dense(1))
+        model.add(GlobalAveragePooling2D())
+        model.add(Dense(1))
 
         model.summary()
         return model

@@ -25,7 +25,8 @@ python dataset.py --data_dir ~/data/celebA_img_align/
 ## Train
 
 ```shell script
-python train.py --data_dir ~/data/celebA_img_align/ --soft_gpu -b 32 --latent 128 --epoch 101 -lr 0.0002 -b1 0. -b2 0.99
+python train.py --data_dir ~/data/celebA_img_align/ -b 16 --latent 128 --lambda_ 20 --epoch 101 -lr 0.001 -b1 0. -b2 0.99
+python train.py --data_dir D:/data/celebA_img_align/ -b 14 --latent 128 --epoch 101 -lr 0.0002 -b1 0. -b2 0.99 --lambda_ 10
 ```
 
 ## Results
