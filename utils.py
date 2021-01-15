@@ -51,7 +51,7 @@ def save_gan(model, path):
 
     plt.clf()
     nc, nr = n+1, n+1
-    plt.figure(0, (nc*2, nr*2))
+    plt.figure(0, (nc*1.5, nr*1.5))
     for c in range(nc):
         for r in range(nr):
             i = r * nc + c
@@ -90,7 +90,8 @@ class InstanceNormalization(keras.layers.Layer):
         self.beta, self.gamma = None, None
 
     def build(self, input_shape):
-        shape = [1, 1, 1, input_shape[-1]]
+        shape = [1 for _ in range(len(input_shape))]
+        shape[-1] = input_shape[-1]
         self.gamma = self.add_weight(
             name='gamma',
             shape=shape,

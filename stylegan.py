@@ -58,10 +58,11 @@ class AddNoise(Layer):
 
 
 class Map(Layer):
-    def __init__(self, size, num_layers):
+    def __init__(self, size, num_layers, norm=None):
         super().__init__()
         self.size = size
         self.num_layers = num_layers
+        self.norm_name = norm
         self.f = None
 
     def call(self, inputs, **kwargs):
@@ -74,7 +75,13 @@ class Map(Layer):
             if i == 0:
                 self.f.add(Dense(self.size, input_shape=input_shape[1:], kernel_initializer=initer.HeNormal()))
                 continue
-            self.f.add(LeakyReLU(0.2))      #TODO: may hurt generator? increase model collapse? why?
+            self.f.add(LeakyReLU(0.2))
+            if self.norm_name is not None:
+                if self.norm_name.lower() == "batch":
+                    self.f.add(BatchNormalization())    # batch norm also increase model collapse
+                elif self.norm_name.lower() == "instance":
+                    self.f.add(InstanceNormalization(axis=(1,)))        # instance norm increase model collapse
+
             self.f.add(Dense(self.size, kernel_initializer=initer.HeNormal()))
 
 
@@ -87,7 +94,7 @@ class Style(Layer):
 
     def call(self, inputs, **kwargs):
         x, w, noise = inputs
-        x = self.conv_expend(x)     #TODO: may help for styling
+        # x = self.conv_expend(x)     #TODO: may help for styling
         x = self.ada_mod((x, w))
         if self.up is not None:
             x = self.up(x)
@@ -103,7 +110,7 @@ class Style(Layer):
         if self.upsampling:
             self.up = UpSampling2D((2, 2), interpolation="bilinear")
         self.add_noise = AddNoise()
-        self.conv_expend = Conv2D(self.filters*2, 1, 1, kernel_initializer=initer.HeNormal())
+        # self.conv_expend = Conv2D(self.filters*2, 1, 1, kernel_initializer=initer.HeNormal())
         self.conv = Conv2D(self.filters, 3, 1, "same", kernel_initializer=initer.HeNormal())
 
 
@@ -118,17 +125,17 @@ def get_generator(latent_dim, img_shape):
     noise_ = keras.Input((img_shape[0], img_shape[1]), name="noise")
     ones = keras.Input((1,), name="ones")
 
-    w = Map(size=128, num_layers=3)(z)
+    w = Map(size=128, num_layers=5)(z)
     noise = tf.expand_dims(noise_, axis=-1)
     const = keras.Sequential([
-        Dense(const_size * const_size * 128, use_bias=False, name="const", kernel_initializer=initer.HeNormal()),
+        Dense(const_size * const_size * 200, use_bias=False, name="const", kernel_initializer=initer.HeNormal()),
         Reshape((const_size, const_size, -1)),
     ], name="const")(ones)
 
     x = AddNoise()((const, noise))
     x = AdaNorm()(x)
     for i in range(n_style_block):
-        x = Style(128, upsampling=False if i == 0 else True)((x, w[:, i], noise))
+        x = Style(200, upsampling=False if i == 0 else True)((x, w[:, i], noise))
     o = Conv2D(img_shape[-1], 7, 1, "same", activation=keras.activations.tanh)(x)
 
     g = keras.Model([ones, z, noise_], o, name="generator")
@@ -138,11 +145,12 @@ def get_generator(latent_dim, img_shape):
 
 class StyleGAN(keras.Model):
     def __init__(self, img_shape, latent_dim,
-                 summary_writer=None, lr=0.0002, beta1=0.5, beta2=0.99, lambda_=10,):
+                 summary_writer=None, lr=0.0002, beta1=0.5, beta2=0.99, lambda_=10, wgan=2):
         super().__init__()
         self.img_shape = img_shape
         self.latent_dim = latent_dim
         self.lambda_ = lambda_
+        self.wgan = wgan
 
         self.g, self.n_style_block = get_generator(latent_dim, img_shape)
         self.g.summary()
@@ -160,22 +168,21 @@ class StyleGAN(keras.Model):
 
     def _get_discriminator(self):
         def add_block(filters, do_norm=True):
-            model.add(Conv2D(filters, 3, strides=2, padding='same'))
+            model.add(Conv2D(filters, 4, strides=2, padding='same'))
             if do_norm: model.add(InstanceNormalization())
             model.add(LeakyReLU(alpha=0.2))
 
         model = keras.Sequential([Input(self.img_shape)], name="d")
         # [n, 128, 128, 3]
         # model.add(GaussianNoise(0.02))
-        add_block(64, do_norm=False)   # -> 64^2
-        add_block(128)                   # -> 32^2
-        add_block(256)                  # -> 16^2
+        add_block(32, do_norm=False)   # -> 64^2
+        add_block(64)                   # -> 32^2
+        add_block(128)                  # -> 16^2
         add_block(256)                  # -> 8^2
-        add_block(256)  # -> 4^2
-        # model.add(Conv2D(256, 3, 2, "valid"))
-        # model.add(InstanceNormalization())
-        # model.add(LeakyReLU(alpha=0.2))
-        model.add(GlobalAveragePooling2D())
+        add_block(512)  # -> 4^2
+        model.add(Flatten())
+        # model.add(GlobalAveragePooling2D())
+        model.add(Dense(256))
         model.add(Dense(1))
 
         model.summary()
@@ -199,9 +206,11 @@ class StyleGAN(keras.Model):
         return tf.reduce_mean(real) - tf.reduce_mean(fake)
 
     def get_inputs(self, n):
-        available_z = [tf.random.normal((n, 1, self.latent_dim)) for _ in range(2)]
-        z = tf.concat([available_z[np.random.randint(0, len(available_z))] for _ in range(self.n_style_block)], axis=1)
-
+        if np.random.rand() < 0.5:
+            available_z = [tf.random.normal((n, 1, self.latent_dim)) for _ in range(2)]
+            z = tf.concat([available_z[np.random.randint(0, len(available_z))] for _ in range(self.n_style_block)], axis=1)
+        else:
+            z = tf.repeat(tf.random.normal((n, 1, self.latent_dim)), self.n_style_block, axis=1)
         noise = tf.random.normal((n, self.img_shape[0], self.img_shape[1]))
         return [tf.ones((n, 1)), z, noise]
 
@@ -243,6 +252,7 @@ class StyleGAN(keras.Model):
 
     def step(self, img):
         gw = self.train_g(len(img) * 2)
-        dgp, dw = self.train_d(img)
+        for _ in range(self.wgan):
+            dgp, dw = self.train_d(img)
         self._train_step += 1
         return gw, dgp, dw
