@@ -11,13 +11,12 @@ parser.add_argument("-o", "--output_path", type=str)
 parser.add_argument("-n", "--n_z1", type=int, default=1, help="number of z1 style blocks")
 parser.add_argument("--z_seed", default=1, type=int)
 parser.add_argument("--n_seed", default=1, type=int)
+parser.add_argument("-s", "--image_size", default=128, type=int)
 parser.add_argument("--latent_dim", type=int, default=128)
 
-args = parser.parse_args(
-    """--model_path visual/2020-12-21_15-41-18/model/cp-0013-12000.ckpt -o demo/stylemix.png -n 2 --z_seed 3 --n_seed 2""".split(" ")
-)
+args = parser.parse_args()
 
-IMG_SHAPE = (128, 128, 3)
+IMG_SHAPE = (args.image_size, args.image_size, 3)
 
 
 def generate(generator, n_style_block):
@@ -76,6 +75,6 @@ def generate(generator, n_style_block):
 
 
 if __name__ == "__main__":
-    gan = StyleGAN(img_shape=(128, 128, 3), latent_dim=args.latent_dim)
+    gan = StyleGAN(img_shape=IMG_SHAPE, latent_dim=args.latent_dim)
     gan.load_weights(args.model_path)
     generate(gan.g, gan.n_style_block)

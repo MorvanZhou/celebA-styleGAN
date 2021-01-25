@@ -167,8 +167,8 @@ class StyleGAN(keras.Model):
         return self.g.call(inputs, training=training)
 
     def _get_discriminator(self):
-        def add_block(filters, do_norm=True):
-            model.add(Conv2D(filters, 4, strides=2, padding='same'))
+        def add_block(filters, do_norm=True, padding="same"):
+            model.add(Conv2D(filters, 4, strides=2, padding=padding))
             if do_norm: model.add(InstanceNormalization())
             model.add(LeakyReLU(alpha=0.2))
 
@@ -179,7 +179,7 @@ class StyleGAN(keras.Model):
         add_block(64)                   # -> 32^2
         add_block(128)                  # -> 16^2
         add_block(256)                  # -> 8^2
-        add_block(512)  # -> 4^2
+        add_block(512, padding="valid")  # -> 4^2
         model.add(Flatten())
         # model.add(GlobalAveragePooling2D())
         model.add(Dense(256))
